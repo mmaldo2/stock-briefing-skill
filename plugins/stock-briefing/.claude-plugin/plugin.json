@@ -1,6 +1,6 @@
 {
   "name": "stock-briefing",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Daily pre-market portfolio briefing for AI infrastructure stocks (NVDA, MRVL, OKLO, CRWV, MOD, LUMN). Use when the user asks for a stock briefing, portfolio check-in, or market update.",
   "author": {
     "name": "Marcus Maldonado",

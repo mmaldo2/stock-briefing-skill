@@ -7,7 +7,7 @@ description: >
   recurring task. Triggers on "stock briefing", "portfolio briefing",
   "market check-in", "stock check-in", "run stock-briefing", or daily
   scheduled execution.
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Stock Briefing Skill
@@ -19,19 +19,61 @@ existing scripts.
 ## Configuration
 
 - **Watchlist**: NVDA, MRVL, OKLO, CRWV, MOD, LUMN
-- **Config file**: `C:\Users\Marcus Maldonado\vault-tools\stock_checkin_config.yaml`
-- **Vault path**: `C:\Users\Marcus Maldonado\OneDrive\Documents\Data Center Research`
-- **Output folder**: `Investments/Daily Briefings/` (in the vault)
-- **Scripts dir**: `C:\Users\Marcus Maldonado\.claude\marcus-local\plugins\stock-briefing\skills\stock-briefing\scripts`
-- **Existing scripts**: `C:\Users\Marcus Maldonado\vault-tools`
-- **Python**: `C:/Python314/python.exe`
 - **Reference checklist**: See `references/stock_monitoring_checklist.md`
+- All paths resolved dynamically in Step 0 via `{python}`, `{scripts_dir}`,
+  `{config_file}`, `{vault_path}`, `{output_dir}` variables.
 
 ## Execution Steps
 
 Follow these steps in order. Each data source is independent — if one fails,
 log the error and continue with the others. Never let a single failure block
 the entire briefing.
+
+### Step 0: Environment Setup
+
+Before any data collection, detect the runtime environment and set all path
+variables. Run this Bash snippet and capture the output:
+
+```bash
+if [ -d "C:/Users" ] 2>/dev/null || [ -d "/c/Users" ]; then
+  echo "ENV=WINDOWS"
+else
+  echo "ENV=COWORK"
+fi
+```
+
+**Set variables based on the detected environment:**
+
+**If WINDOWS:**
+```
+{env}         = WINDOWS
+{python}      = C:/Python314/python.exe
+{scripts_dir} = C:/Users/Marcus Maldonado/.claude/marcus-local/plugins/stock-briefing/skills/stock-briefing/scripts
+{config_file} = C:/Users/Marcus Maldonado/vault-tools/stock_checkin_config.yaml
+{vault_path}  = C:/Users/Marcus Maldonado/OneDrive/Documents/Data Center Research
+{output_dir}  = {vault_path}/Investments/Daily Briefings
+```
+
+**If COWORK:**
+```
+{env}         = COWORK
+{python}      = python3
+{scripts_dir} = (locate via: find ~/.claude -path "*/stock-briefing/scripts/market_data.py" -printf "%h" 2>/dev/null)
+{config_file} = {scripts_dir}/stock_checkin_config.yaml
+{vault_path}  = (unavailable)
+{output_dir}  = /tmp/stock-briefing
+```
+
+**On COWORK only**, install dependencies and create the output directory:
+```bash
+python3 -m pip install --quiet --break-system-packages \
+  requests beautifulsoup4 exchange_calendars markdown2 \
+  pyyaml "yfinance>=0.2.36" lxml 2>&1 | tail -1
+mkdir -p /tmp/stock-briefing
+```
+
+**Verify** `{scripts_dir}` resolved correctly by checking that
+`{scripts_dir}/market_data.py` exists. If not, abort with an error message.
 
 ### Step 1: Determine Today's Date and Cadence Layers
 
@@ -42,13 +84,13 @@ day_of_month = 1-31
 ```
 
 **Check if today is a US market trading day:**
-Run: `C:/Python314/python.exe -c "from exchange_calendars import get_calendar; import datetime; cal = get_calendar('XNYS'); d = datetime.date.today(); print('OPEN' if cal.is_session(d.isoformat()) else 'CLOSED')"`
+Run: `{python} -c "from exchange_calendars import get_calendar; import datetime; cal = get_calendar('XNYS'); d = datetime.date.today(); print('OPEN' if cal.is_session(d.isoformat()) else 'CLOSED')"`
 
 If the `exchange_calendars` library is not installed, use WebSearch to check
 "Is the US stock market open today {today}?" as a fallback.
 
-- If CLOSED: Write a minimal note "Markets Closed — {today}" to the vault and
-  skip all remaining steps. Do NOT send email for market-closed days.
+- If CLOSED: Write a minimal note "Markets Closed — {today}" to the output
+  location and skip all remaining steps. Do NOT send email for market-closed days.
 - If OPEN: Continue.
 
 **Determine active cadence layers:**
@@ -69,9 +111,9 @@ if day_of_month <= 3 and it's the first trading day of the month:
 ```
 
 **Check earnings proximity:**
-Read `C:\Users\Marcus Maldonado\vault-tools\stock_checkin_config.yaml` and
-check each ticker's `earnings_date`. If any ticker's earnings date is within
-+/- 1 calendar day of today, add "earnings" to layers and note which tickers.
+Read `{config_file}` and check each ticker's `earnings_date`. If any ticker's
+earnings date is within +/- 1 calendar day of today, add "earnings" to layers
+and note which tickers.
 
 ### Step 2: Collect Quantitative Data (Existing Scripts)
 
@@ -79,7 +121,7 @@ Run the existing daily check-in script to get price snapshots, guardrails,
 and cadence-aware task lists:
 
 ```bash
-C:/Python314/python.exe "C:/Users/Marcus Maldonado/vault-tools/daily_stock_checkin.py" --config "C:/Users/Marcus Maldonado/vault-tools/stock_checkin_config.yaml" --stdout-only --date {today}
+{python} "{scripts_dir}/daily_stock_checkin.py" --config "{config_file}" --stdout-only --date {today}
 ```
 
 Capture the full stdout output. This gives you:
@@ -117,7 +159,7 @@ Also search for ecosystem-wide news:
 
 #### 3b: SEC Filings (script — every day)
 
-Run: `C:/Python314/python.exe "{scripts_dir}/sec_filings.py" --tickers NVDA,MRVL,OKLO,CRWV,MOD,LUMN`
+Run: `{python} "{scripts_dir}/sec_filings.py" --tickers NVDA,MRVL,OKLO,CRWV,MOD,LUMN`
 
 If the script is not yet available or fails, use WebSearch as fallback:
 - Query: `site:sec.gov "{TICKER}" 8-K OR "Form 4" {this week}`
@@ -128,7 +170,7 @@ Report any new 8-K, Form 4, 13D/G filings found.
 
 Only run if "weekly" is in cadence layers OR a red flag is detected:
 
-Run: `C:/Python314/python.exe "{scripts_dir}/insider_activity.py" --tickers NVDA,MRVL,OKLO,CRWV,MOD,LUMN`
+Run: `{python} "{scripts_dir}/insider_activity.py" --tickers NVDA,MRVL,OKLO,CRWV,MOD,LUMN`
 
 If the script is not yet available or fails, use WebSearch:
 - Query: `"insider trading" "{TICKER}" site:openinsider.com`
@@ -139,9 +181,7 @@ Flag cluster selling (multiple executives selling simultaneously) as a RED FLAG.
 
 Run if "bi_monthly" OR "weekly" is in cadence layers:
 
-Run: `C:/Python314/python.exe "{scripts_dir}/market_data.py" --tickers NVDA,MRVL,OKLO,CRWV,MOD,LUMN --config "{config_file}"`
-
-Where `{config_file}` = `C:\Users\Marcus Maldonado\vault-tools\stock_checkin_config.yaml`
+Run: `{python} "{scripts_dir}/market_data.py" --tickers NVDA,MRVL,OKLO,CRWV,MOD,LUMN --config "{config_file}"`
 
 This single script fetches yfinance `.info` once per unique ticker and returns:
 - **Short interest** for all watchlist tickers (use on bi_monthly days)
@@ -172,27 +212,33 @@ For each relevant market found (>$10K volume):
 
 If no relevant markets found or MCP tools unavailable, skip this section.
 
-#### 3f: Playwright Scraping — Finviz (comprehensive days only)
+#### 3f: Analyst Consensus — Finviz (comprehensive days only)
 
 Only run if depth is "comprehensive" (Monday or earnings window):
 
-Use the Playwright MCP tools:
+**If Playwright MCP tools are available:**
 1. `browser_navigate` to `https://finviz.com/quote.ashx?t={TICKER}`
 2. `browser_snapshot` to capture the page
 3. Extract: analyst consensus rating, price target (mean/high/low), recent
    analyst actions (upgrades/downgrades)
+Repeat for each ticker.
 
-Repeat for each ticker. If Playwright is unavailable or Finviz blocks,
-use WebSearch as fallback: `"{TICKER}" analyst rating price target finviz`
+**If Playwright is NOT available (e.g. Cowork):**
+Use WebSearch as fallback for each ticker:
+- Query: `"{TICKER}" analyst consensus price target site:finviz.com OR site:tipranks.com`
 
 #### 3g: Obsidian Vault Cross-Reference (comprehensive days only)
 
 Only run if depth is "comprehensive":
 
+**If `{vault_path}` is available (WINDOWS):**
 Read each company's vault note from `{vault_path}/Companies/{company_name}.md`:
 - Check the `## Financial Data` section for last-known values
 - Compare current price vs. last recorded price
 - Flag significant changes (>5% move since last vault update)
+
+**If `{vault_path}` is NOT available (COWORK):**
+Skip this step. Note in the briefing: "Vault cross-reference: skipped (not available in this environment)"
 
 #### 3h: Monthly Macro Layer (1st business day only)
 
@@ -230,25 +276,16 @@ Synthesize across all data sources. Produce 3-7 bullet points:
 - What to research further
 - Position management considerations
 
-### Step 5: Write to Obsidian Vault
+### Step 5: Write Output
 
-Write the briefing to:
-`{vault_path}/Investments/Daily Briefings/{today}.md`
-
-Where `vault_path` = `C:\Users\Marcus Maldonado\OneDrive\Documents\Data Center Research`
-
-**Create the directory** if `Investments/Daily Briefings/` doesn't exist:
-```bash
-mkdir -p "C:/Users/Marcus Maldonado/OneDrive/Documents/Data Center Research/Investments/Daily Briefings"
-```
-
-**If a file already exists for today**, overwrite it (latest data wins).
+Write the briefing to the appropriate location based on environment.
 
 **Frontmatter format:**
 ```yaml
 ---
 date: {today}
 type: stock-briefing
+environment: {env}
 tickers: [NVDA, MRVL, OKLO, CRWV, MOD, LUMN]
 status: {AUTO_CLEAR or MANUAL_REVIEW}
 cadence: [{active layers as list}]
@@ -256,22 +293,36 @@ depth: {concise or detailed or comprehensive}
 ---
 ```
 
+**If WINDOWS:**
+Write to: `{vault_path}/Investments/Daily Briefings/{today}.md`
+
+Create the directory if it doesn't exist:
+```bash
+mkdir -p "{output_dir}"
+```
+
+**If COWORK:**
+Write to: `{output_dir}/{today}.md` (i.e. `/tmp/stock-briefing/{today}.md`)
+
+If a file already exists for today, overwrite it (latest data wins).
+If the write fails, print the briefing to stdout as a fallback.
+
 ### Step 6: Send Email via Gmail
 
-**Only if Gmail is available in Cowork:**
+Generate an HTML version of the briefing inline — convert the markdown
+to HTML using simple tag conversion (headings, tables, bold, lists, links).
+Wrap in a minimal HTML template with inline CSS for readability.
 
-1. Generate an HTML version of the briefing:
-   - Run: `C:/Python314/python.exe "{scripts_dir}/email_renderer.py" "{vault_path}/Investments/Daily Briefings/{today}.md"`
-   - If the script is not available, just use the markdown text as-is
-
-2. Compose and send an email:
-   - To: the authenticated Gmail user (primary address)
+**If `gmail_create_draft` tool is available:**
+1. Create a draft email:
+   - To: `marcusmaldonado15@gmail.com`
    - Subject: `Portfolio Briefing — {today} [{status}]`
-   - Body: HTML rendered briefing (or markdown fallback)
+   - Body: HTML rendered briefing
+   - Content type: `text/html`
 
-3. If Gmail is not configured or sending fails:
-   - Log: "Gmail delivery skipped — not configured or send failed"
-   - The vault note is still the primary output
+**If Gmail tools are NOT available:**
+- Log: "Gmail delivery skipped — not available in this environment"
+- The written output file is still the primary deliverable
 
 ### Step 7: Report Completion
 
@@ -280,11 +331,12 @@ After all steps complete, summarize:
 ```
 Stock Briefing Complete — {today}
 
+Environment: {env}
 Status: {AUTO_CLEAR / MANUAL_REVIEW}
 Depth: {concise / detailed / comprehensive}
 Cadence: {active layers}
-Vault: {vault_path}/Investments/Daily Briefings/{today}.md
-Email: {sent / skipped}
+Output: {output_dir}/{today}.md
+Email: {draft created / skipped}
 
 Data sources: {list which succeeded and which failed}
 
@@ -319,6 +371,6 @@ of other cadence rules.
   relevant section and continue
 - If the existing daily_stock_checkin.py fails completely, still attempt other
   data sources and produce a partial briefing with a prominent warning
-- If the vault write fails, print the briefing to stdout as a fallback
+- If the output write fails, print the briefing to stdout as a fallback
 - Never produce an empty briefing — at minimum, output the date, status, and
   an explanation of what failed

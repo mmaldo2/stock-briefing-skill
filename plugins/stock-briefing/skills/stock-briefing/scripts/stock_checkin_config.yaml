@@ -1,0 +1,32 @@
+watchlist:
+- ticker: NVDA
+  company: NVIDIA
+  earnings_date: '2026-05-20'
+- ticker: MRVL
+  company: Marvell Technology
+  earnings_date: '2026-03-05'
+- ticker: OKLO
+  company: Oklo Inc.
+  earnings_date: '2026-03-30'
+- ticker: CRWV
+  company: CoreWeave
+  earnings_date: '2026-02-26'
+- ticker: MOD
+  company: Modine Manufacturing
+  earnings_date: '2026-05-19'
+- ticker: LUMN
+  company: Lumen Technologies
+  earnings_date: '2026-04-30'
+guardrails:
+  price_move_pct_threshold: 7.0
+  stale_data_max_days: 1
+  earnings_window_days: 1
+  max_missing_tickers: 0
+output:
+  filename_format: '%Y-%m-%d.md'
+cadence:
+  weekly_review_day: Monday
+  bi_monthly_days:
+  - 1
+  - 15
+  monthly_review_business_day: 1
