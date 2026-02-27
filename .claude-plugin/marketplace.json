@@ -1,0 +1,14 @@
+{
+  "name": "marcus-local",
+  "owner": {
+    "name": "Marcus Maldonado"
+  },
+  "plugins": [
+    {
+      "name": "stock-briefing",
+      "source": "./plugins/stock-briefing",
+      "description": "Daily pre-market portfolio briefing for AI infrastructure stocks",
+      "version": "1.0.0"
+    }
+  ]
+}
